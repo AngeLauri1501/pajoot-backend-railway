@@ -598,7 +598,7 @@ io.on('connection', (socket) => {
             })
             
             // Eliminar el juego de la lista de juegos
-            games.removeGame(gameWithDisconnectedHost.hostId);
+            games.removeGame(gameWithDisconnectedHost.pin);
             
             console.log(`Game with PIN ${gameWithDisconnectedHost.pin} cancelled due to host disconnection.`);
         }
