@@ -50,7 +50,7 @@ const upload = multer();
 require("dotenv").config();
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 const server = createServer(app);
 const io = new Server(server,{
     cors:'*'
@@ -607,7 +607,7 @@ io.on('connection', (socket) => {
             })
             
             // Eliminar el juego de la lista de juegos
-            games.removeGame(gameWithDisconnectedHost.hostId);
+            games.removeGame(gameWithDisconnectedHost.pin);
             
             console.log(`Game with PIN ${gameWithDisconnectedHost.pin} cancelled due to host disconnection.`);
         }
