@@ -426,6 +426,8 @@ io.on('connection', (socket) => {
 
         let game = games.games.filter((game) => game.pin == parsedData.pin)[0];
 
+        game.gameLive = true;
+
         //get the first question
 
         let question = game.gameData.questions.shift();
@@ -537,6 +539,13 @@ io.on('connection', (socket) => {
             return;
         }
 
+        if(game.gameLive){
+            // La partida ya ha comenzado
+            console.log('Intento de unirse a una partida en curso con el código:', parsedData.pin);
+            socket.emit('joinError', { message: 'La partida ya ha comenzado' });
+            return;
+        }
+
         game.gameData.players.addPlayer(game.hostId,parsedData.playerId,socket.id,parsedData.playerName,parsedData.photoURL,{score: 0});
 
         let hostSocket = game.hostId;
@@ -608,5 +617,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(port, () => {
-    console.log(`Server listening at http://localhost:${port}`);
+    console.log(`Server listening at port ${port}`);
 });
