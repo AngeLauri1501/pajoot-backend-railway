@@ -125,35 +125,12 @@ async function sendVerificationEmail(email, token) {
     }
 }
 
-
-//PRUEBA DE SWAGGER, IGNORAR
-
-/**
- * @swagger
- * /api/users:
- *   get:
- *     summary: Get a list of users
- *     description: Retrieve a list of users from the server
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             example:
- *               message: List of users retrieved successfully
- *               users: []
- */
-app.get("/api/users", (req, res) => {
-    // Tu lógica para obtener la lista de usuarios
-    res.json({ message: "List of users retrieved successfully", users: [] });
-});
-
 /**
  * @swagger
  * /api/send-verification-email:
  *   post:
  *     summary: Send a verification email
- *     description: Send a verification email to the specified email address
+ *     description: Send a verification email to the specified email address.
  *     requestBody:
  *       required: true
  *       content:
@@ -172,6 +149,18 @@ app.get("/api/users", (req, res) => {
  *           application/json:
  *             example:
  *               message: Email sent successfully
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: Email is required
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: Internal server error
  */
 
 app.post("/api/send-verification-email", emailRateLimit, async (req, res) => {
@@ -262,7 +251,7 @@ app.post("/api/send-verification-email", emailRateLimit, async (req, res) => {
  * /api/verify-token:
  *   post:
  *     summary: Verify a verification token
- *     description: Verify a verification token for the specified email address
+ *     description: Verify a verification token for the specified email address.
  *     requestBody:
  *       required: true
  *       content:
@@ -284,18 +273,32 @@ app.post("/api/send-verification-email", emailRateLimit, async (req, res) => {
  *           application/json:
  *             example:
  *               message: Verification successful
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: Email and verification token are required
+ *       404:
+ *         description: Not found
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: Invalid verification token
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: Internal server error
  */
+
 app.post("/api/verify-token", async (req, res) => {
     const userEmail = req.body.email;
     const verificationToken = req.body.verification_token;
 
-    if (!userEmail) {
-        res.status(400).json({ error: 'Email is required' });
-        return;
-    }
-
-    if (!verificationToken) {
-        res.status(400).json({ error: 'Verification token is required' });
+    if (!userEmail || !verificationToken) {
+        res.status(400).json({ error: 'Email and verification token are required' });
         return;
     }
 
@@ -305,7 +308,7 @@ app.post("/api/verify-token", async (req, res) => {
         const existingTokenSnapshot = await verificationTokensRef.orderByChild("email").equalTo(userEmail).once("value");
 
         if (!existingTokenSnapshot.exists()) {
-            res.status(400).json({ error: 'Invalid verification token' });
+            res.status(404).json({ error: 'Invalid verification token' });
             return;
         }
 
@@ -320,26 +323,24 @@ app.post("/api/verify-token", async (req, res) => {
             // Respuesta exitosa
             res.json({ message: "Verification successful" });
         } else {
-            res.status(400).json({ error: 'Invalid verification token' });
+            res.status(404).json({ error: 'Invalid verification token' });
         }
     } catch (error) {
         console.error(`Error verifying token: ${error}`);
         res.status(500).json({ error: "Internal server error" });
     }
-}
-);
-
+});
 
 /**
  * @swagger
  * /api/create-user:
  *   post:
  *     summary: Create a new user
- *     description: Create a new user with the provided email, password, and display name
+ *     description: Create a new user with the provided email, password, and display name.
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             properties:
@@ -349,10 +350,9 @@ app.post("/api/verify-token", async (req, res) => {
  *                 type: string
  *               user:
  *                 type: string
- *             example:
- *               email: "example@example.com"
- *               password: "password123"
- *               user: "John Doe"
+ *               image:
+ *                 type: string
+ *                 format: binary
  *     responses:
  *       200:
  *         description: Successful response
@@ -360,48 +360,135 @@ app.post("/api/verify-token", async (req, res) => {
  *           application/json:
  *             example:
  *               message: User created successfully
+ *               user:
+ *                 type: object
+ *                 properties:
+ *                   email:
+ *                     type: string
+ *                   displayName:
+ *                     type: string
+ *                   photoURL:
+ *                     type: string
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: Missing required fields
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: Internal server error
  */
+
 app.post("/api/create-user" ,upload.single('image'),async (req, res) => {
-    console.log(req.body);
     const userEmail = req.body.email;
     const userPassword = req.body.password;
     const userDisplayName = req.body.user;
-    const userProfileImage = req.file; // Changed to req.file since it's a single file upload
+    const userProfileImage = req.file; 
 
-    if (!userEmail || !userPassword || !userDisplayName /*|| !userProfileImage*/) {
+    if (!userEmail || !userPassword || !userDisplayName) {
         res.status(400).json({ error: 'Missing required fields' });
         return;
     }
 
     try {
-        // Subir la imagen de perfil a AWS S3
-        const uploadParams = {
-            Bucket: 'pajoot',
-            Key: `profiles/${userEmail}/${Date.now()}_${userProfileImage.originalname}`, // Ruta en S3 donde se almacenará la imagen
-            Body: userProfileImage.buffer, // Changed to userProfileImage.buffer since it's a single file upload
-            ContentType: userProfileImage.mimetype // Tipo de contenido de la imagen
-        };
+        let photoURL;
+        if (userProfileImage){
+            // Upload profile image to AWS S3
+            const uploadParams = {
+                Bucket: 'pajoot',
+                Key: `profiles/${userEmail}/${Date.now()}_${userProfileImage.originalname}`,
+                Body: userProfileImage.buffer,
+                ContentType: userProfileImage.mimetype
+            };
 
-        const uploadResult = await s3.upload(uploadParams).promise();
-
-        // Ahora uploadResult.Location contiene la URL de la imagen en S3
-
-        // Crear el usuario en la base de datos con la URL de la imagen de perfil
-        // Aquí debes insertar la URL de la imagen en tu base de datos junto con otros datos del usuario
+            const uploadResult = await s3.upload(uploadParams).promise();
+            photoURL = uploadResult.Location;
+        }
 
         const userRecord = await admin.auth().createUser({
             email: userEmail,
             password: userPassword,
             displayName: userDisplayName,
-            photoURL: uploadResult.Location // URL de la imagen de perfil
+            photoURL: photoURL
         });
 
-        console.log(`Successfully created new user: ${userRecord.uid}`);
+        console.log(`Successfully created new user: ${userRecord}`);
 
-        res.json({ message: "User created successfully" });
+        res.json({ message: "User created successfully" , user: userRecord});
     } catch (error) {
         console.error(`Error creating new user: ${error}`);
         res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+/**
+ * @swagger
+ * /api/upload-photo:
+ *   post:
+ *     summary: Upload a photo
+ *     description: Upload a photo to AWS S3.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *               email:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             example:
+ *               url: "https://your-bucket.s3.amazonaws.com/profiles/123456789_image.jpg"
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: No image provided or email missing
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: Internal server error while uploading image
+ */
+
+app.post("/api/upload-photo", upload.single('image'), async (req, res) => {
+    try {
+        // Obtener la imagen y el correo electrónico del cuerpo de la solicitud
+        const image = req.file;
+        const userEmail = req.body.email;
+
+        if (!image || !userEmail) {
+            return res.status(400).json({ error: "No image provided or email missing" });
+        }
+
+        // Subir la imagen a AWS S3
+        const uploadParams = {
+            Bucket: 'pajoot',
+            Key: `profiles/${userEmail}/${Date.now()}_${image.originalname}`,
+            Body: image.buffer,
+            ContentType: image.mimetype
+        };
+
+        const uploadResult = await s3.upload(uploadParams).promise();
+
+        // Devolver la URL de la imagen subida
+        res.json({ url: uploadResult.Location });
+    } catch (error) {
+        console.error("Error uploading image:", error);
+        res.status(500).json({ error: "Internal server error while uploading image" });
     }
 });
 
@@ -417,7 +504,6 @@ io.on('connection', (socket) => {
 
             io.to(player.socketId).emit('hostTimeUp', game);
         })
-        //io.emit('hostTimeUp',game)
     })
 
     socket.on("startGame", function(data) {
@@ -439,7 +525,6 @@ io.on('connection', (socket) => {
 
             io.to(player.socketId).emit('hostStartGame', question);
         })
-        //io.emit('hostStartGame', question);
     })
 
     socket.on("cancelGame", function(data) {
@@ -464,7 +549,6 @@ io.on('connection', (socket) => {
 
                 io.to(player.socketId).emit('hostGameOver', game);
             })
-            //io.emit('hostGameOver')
             return;
         }
 
@@ -473,7 +557,6 @@ io.on('connection', (socket) => {
 
             io.to(player.socketId).emit('hostNextQuestion', question);
         })
-        //io.emit('hostNextQuestion', question);
     })
 
     socket.on('createGame', async function (data) {
@@ -535,14 +618,14 @@ io.on('connection', (socket) => {
         if (!game) {
             // La partida con el código especificado no existe
             console.log('Intento de unirse a una partida inexistente con el código:', parsedData.pin);
-            socket.emit('joinError', { message: 'La partida especificada no existe' });
+            socket.emit('joinError', { message: 'El código de partida no existe' });
             return;
         }
 
         if(game.gameLive){
             // La partida ya ha comenzado
             console.log('Intento de unirse a una partida en curso con el código:', parsedData.pin);
-            socket.emit('joinError', { message: 'La partida ya ha comenzado' });
+            socket.emit('joinError', { message: 'Esta partida ya ha comenzado' });
             return;
         }
 
@@ -608,6 +691,8 @@ io.on('connection', (socket) => {
             
             // Eliminar el juego de la lista de juegos
             games.removeGame(gameWithDisconnectedHost.pin);
+
+            console.log(games.games)
             
             console.log(`Game with PIN ${gameWithDisconnectedHost.pin} cancelled due to host disconnection.`);
         }
@@ -617,5 +702,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(port, () => {
-    console.log(`Server listening at port ${port}`);
+    console.log(`Server listening at http://localhost:${port}`);
 });
